@@ -34,3 +34,64 @@ where battle_date >= '2016-12-01'
 group by 1,2
 order by 1.2
 ;
+
+
+
+WITH INSTALL AS (
+SELECT 
+   BD.device_token
+  ,BD.product_id
+  ,to_date(install_time)              AS install_cohort
+  ,platform_name                      AS platform
+  ,country
+  ,LOWER(pub.channel_name)            AS channel
+  ,install_app_version                AS build_version
+  ,CASE 
+      WHEN  LOWER(PUB.publisher_name) LIKE "%unmatched%" 
+       AND  LOWER(PUB.channel_name)   LIKE "%organic%"
+      THEN "organic"
+      ELSE LOWER(PUB.publisher_name)
+   END                                AS publisher
+FROM biz.device_SUMmary BD
+LEFT JOIN biz.dim_publisher PUB  ON BD.publisher_id = PUB.publisher_id
+WHERE (device_quality = 'good' OR device_quality = 'suspect cheater')
+  AND BD.product_id  = 35
+  AND platform_name IN ('ios', 'android')
+  AND LOWER(install_app_version) NOT LIKE '%dev%'
+  AND country IN ('AU','NZ','SE','IE','NL','CA')
+  AND to_date(install_time) >= '2016-12-01'
+),
+
+ BATTLE_DATA as (
+  
+  SELECT ba.device_token_s AS device_token
+         ,ba.`_battle_type_s` AS battle_type
+         ,ba.`_chapter_s` AS chapter
+         ,CASE WHEN concat(split(ba.`_chapter_s`,'[\_]')[0],split(ba.`_chapter_s`,'[\_]')[1]) is NULL THEN split(ba.`_chapter_s`,'[\_]')[0]
+          ELSE concat(split(ba.`_chapter_s`,'[\_]')[0],split(ba.`_chapter_s`,'[\_]')[1]) END AS chapter_part
+          ,I.build_version
+          ,I.install_cohort
+          ,I.country
+          ,I.channel
+          ,I.platform
+          ,I.publisher
+
+         ,count(*) AS cnt
+  FROM whiplash.battle ba
+    INNER JOIN INSTALL I
+        ON I.device_token = ba.device_token_s
+  WHERE
+     ba.year = 2016
+     and ba.month = 12
+     and ba.day = 20
+  GROUP BY ba.device_token_s ,ba.`_battle_type_s`,ba.`_chapter_s`,split(ba.`_chapter_s`,'[\_]')[1],I.build_version
+          ,I.install_cohort
+          ,I.country
+          ,I.channel
+          ,I.platform
+          ,I.publisher
+  )
+
+ SELECT build_version, count(distinct device_token)
+ from BATTLE_DATA
+ GROUP BY build_version ORDER BY build_version;
